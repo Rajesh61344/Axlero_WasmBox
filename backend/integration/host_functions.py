@@ -113,6 +113,15 @@ class HostFunctionRegistry:
                 return_type="dict",
             )
         )
+        self.register(
+            HostFunctionSpec(
+                name="delete_database",
+                permissions=["system:admin"],
+                description="Deletes a database (Dangerous!)",
+                param_types=["string"],
+                return_type="none",
+            )
+        )
 
     def register(
         self,
@@ -316,6 +325,14 @@ def default_host_log(message: str) -> None:
 def default_get_customer_data(customer_id: str) -> dict[str, Any]:
     """Default customer data host function (returns mock data)."""
     return {"customer_id": customer_id, "name": "Example Customer"}
+
+@host_function(
+    name="delete_database",
+    permissions=["system:admin"],
+    description="Deletes a database (Dangerous!)"
+)
+def default_delete_database(db_name: str) -> None:
+    pass
 
 
 # Global default registry instance

@@ -21,6 +21,7 @@ class WasmBackendType(str, Enum):
 
     EMBEDDED = "embedded"
     MICROPYTHON = "micropython"
+    WASI_PYTHON = "wasi_python"
 
 
 # ---------------------------------------------------------------------------
@@ -227,7 +228,7 @@ class ExecutionLimits:
 
     timeout_ms: int = 50
     memory_limit_bytes: int = 10 * 1024 * 1024  # 10 MiB
-    max_fuel: int = 5_000_000  # Wasmtime fuel units
+    max_fuel: int = 2_000_000_000  # Wasmtime fuel units
     max_memory_pages: int = 160  # 160 × 64 KiB = 10 MiB
     max_tables: int = 1
     max_instances: int = 1
@@ -259,7 +260,7 @@ class CompileConfig:
     """
 
     # Backend selection
-    backend: WasmBackendType = WasmBackendType.EMBEDDED
+    backend: WasmBackendType = WasmBackendType.WASI_PYTHON
 
     # Sub-configs
     security_policy: SecurityPolicy = field(default_factory=SecurityPolicy)

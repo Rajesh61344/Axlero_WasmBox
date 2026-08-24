@@ -61,8 +61,8 @@ backend/
 │   ├── cli.py                   # Command-line interface
 │   └── backends/                # Pluggable WASM generation backends
 │       ├── base.py              # Abstract WasmCompilerBackend
-│       ├── embedded.py          # Primary: packages Python in WASM custom sections
-│       └── micropython.py       # MicroPython WASI runtime backend
+│       ├── wasi_python.py       # Primary: Embeds source into CPython WASI runtime (python.wasm)
+│       └── embedded.py          # Legacy/Metadata: structurally valid WASM for testing
 ├── integration/                 # Role 2/3 interface
 │   ├── runtime_contract.py      # Protocol definitions for runtime interaction
 │   ├── runtime_adapter.py       # Wasmtime adapter for integration testing

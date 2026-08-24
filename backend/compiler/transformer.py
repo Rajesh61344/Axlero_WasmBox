@@ -133,9 +133,17 @@ def __wasmbox_wrapped_{entrypoint}(*args, **kwargs):
         return {{"error": type(e).__name__, "message": str(e)}}
 # ----------------------------------
 """
-        # Note: In a real implementation we would modify the AST to rename the original 
-        # or properly inject this at the bottom if the entrypoint exists. For now, 
-        # append to end and it assumes entrypoint exists.
+        if config.backend == "wasi_python":
+            wrapper_code += f"""
+if __name__ == '__main__':
+    import sys, json
+    try:
+        input_data = json.load(sys.stdin)
+    except Exception:
+        input_data = {{}}
+    result = __wasmbox_wrapped_{entrypoint}(input_data)
+    print(json.dumps(result))
+"""
         result.transformations.append("Wrapped entrypoint with error handling")
         return source + "\n" + wrapper_code
 

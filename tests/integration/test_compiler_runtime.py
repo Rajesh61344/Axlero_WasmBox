@@ -12,6 +12,8 @@ from pathlib import Path
 from backend.compiler import compile, CompileConfig
 
 
+from backend.compiler.config import WasmBackendType
+
 @pytest.fixture
 def config() -> CompileConfig:
     """Compilation config with cache disabled for test isolation."""
@@ -59,6 +61,21 @@ def test_golden_hello_plugin(config: CompileConfig) -> None:
     assert result.artifact_size_bytes is not None
     assert result.artifact_size_bytes == len(result.artifact_bytes)
 
+    # ---------------------------------------------------------
+    # REAL EXECUTION TEST
+    # ---------------------------------------------------------
+    from backend.integration.runtime_adapter import WasmtimeAdapter
+    adapter = WasmtimeAdapter()
+    
+    input_data = {"value": 42}
+    exec_res = adapter.execute(result, input_data)
+    
+    assert exec_res.success is True, f"Execution failed: {exec_res.error}"
+    assert exec_res.output == {
+        "message": "Hello from WasmBox",
+        "value": 84
+    }
+
 
 @pytest.mark.integration
 def test_golden_filesystem_attack(config: CompileConfig) -> None:
@@ -101,6 +118,19 @@ def test_golden_infinite_loop_compiles(config: CompileConfig) -> None:
     assert result.manifest.max_fuel > 0
     assert result.manifest.execution_timeout_ms > 0
 
+    from backend.integration.runtime_adapter import WasmtimeAdapter
+    from backend.compiler.config import ExecutionLimits
+    adapter = WasmtimeAdapter()
+    
+    # We set a very low fuel limit so the test runs fast
+    limits = ExecutionLimits(max_fuel=50000, timeout_ms=10)
+    exec_res = adapter.execute(result, {}, limits=limits)
+    
+    # It must fail because of the infinite loop
+    assert exec_res.success is False
+    assert exec_res.error_code == "TIMEOUT"
+    assert "timeout" in exec_res.error.lower() or "fuel" in exec_res.error.lower()
+
 
 @pytest.mark.integration
 def test_golden_host_function(config: CompileConfig) -> None:
@@ -115,6 +145,28 @@ def test_golden_host_function(config: CompileConfig) -> None:
 
 
 @pytest.mark.integration
+def test_host_function_unauthorized(config: CompileConfig) -> None:
+    """Golden test: host_function_unauthorized.py should compile but fail at runtime."""
+    source = read_example("host_function_unauthorized.py")
+    result = _compile(source, config)
+
+    assert result.success is True, f"Plugin should compile: {[d.message for d in result.diagnostics if d.severity == 'error']}"
+    assert result.manifest is not None
+    assert "delete_database" in result.manifest.requested_host_functions
+
+    from backend.integration.runtime_adapter import WasmtimeAdapter
+    adapter = WasmtimeAdapter()
+    
+    # Execute the artifact
+    exec_res = adapter.execute(result, {})
+    
+    # The runtime MUST reject it before execution
+    assert exec_res.success is False
+    assert exec_res.error_code == "HOST_FUNCTION_NOT_ALLOWED"
+    assert "not allowed" in exec_res.error.lower()
+
+
+@pytest.mark.integration
 def test_golden_calculator(config: CompileConfig) -> None:
     """Golden test: calculator.py should compile successfully."""
     source = read_example("calculator.py")
@@ -124,6 +176,19 @@ def test_golden_calculator(config: CompileConfig) -> None:
     assert result.artifact_bytes is not None
     assert result.artifact_size_bytes is not None
     assert result.artifact_size_bytes > 0
+
+    from backend.integration.runtime_adapter import WasmtimeAdapter
+    adapter = WasmtimeAdapter()
+    
+    # Test Add
+    res = adapter.execute(result, {"operation": "add", "a": 10, "b": 5})
+    assert res.success
+    assert res.output["result"] == 15
+    
+    # Test Math.pow (from math module)
+    res = adapter.execute(result, {"operation": "power", "a": 2, "b": 8})
+    assert res.success
+    assert res.output["result"] == 256.0
 
 
 @pytest.mark.integration

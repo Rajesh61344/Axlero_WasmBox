@@ -183,6 +183,54 @@ def cmd_env(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_run(args: argparse.Namespace) -> int:
+    """Handle the run command."""
+    wasm_path = Path(args.wasm_file)
+    if not wasm_path.exists():
+        print(f"Error: WASM file '{wasm_path}' does not exist.", file=sys.stderr)
+        return 1
+
+    wasm_bytes = wasm_path.read_bytes()
+    
+    # Try to extract manifest to get plugin info
+    from backend.integration.runtime_adapter import WasmtimeAdapter
+    
+    adapter = WasmtimeAdapter()
+    manifest = adapter.extract_manifest(wasm_bytes)
+    
+    class SimpleArtifact:
+        def __init__(self, wasm_bytes, manifest):
+            self.wasm_bytes = wasm_bytes
+            self.manifest = manifest
+            self.tenant_id = manifest.tenant_id if manifest else "default"
+            self.plugin_id = manifest.plugin_name if manifest else "unknown"
+            
+    artifact = SimpleArtifact(wasm_bytes, manifest)
+    
+    import json
+    input_data = {}
+    if args.input:
+        try:
+            input_data = json.loads(args.input)
+        except json.JSONDecodeError:
+            print(f"Error: Invalid JSON input: {args.input}", file=sys.stderr)
+            return 1
+            
+    print(f"Executing {wasm_path.name}...")
+    res = adapter.execute(artifact, input_data)
+    
+    if res.success:
+        print("\nSuccess!")
+        print(f"Result: {json.dumps(res.output, indent=2)}")
+        print(f"Fuel consumed: {res.fuel_consumed}")
+        return 0
+    else:
+        print("\nExecution Failed.")
+        print(f"Error: {res.error}")
+        print(f"Code: {res.error_code}")
+        return 1
+
+
 def main() -> int:
     """Main CLI entrypoint."""
     parser = argparse.ArgumentParser(description="WasmBox Compiler CLI")
@@ -194,6 +242,11 @@ def main() -> int:
     compile_parser.add_argument("--output-dir", help="Directory to write the output .wasm file")
     compile_parser.add_argument("--plugin-name", help="Name of the plugin")
     compile_parser.add_argument("--tenant-id", help="Tenant ID for the plugin")
+    
+    # Run command
+    run_parser = subparsers.add_parser("run", help="Execute a compiled WASM plugin")
+    run_parser.add_argument("wasm_file", help="WASM file to execute")
+    run_parser.add_argument("--input", "-i", help="JSON input data string", default="{}")
     
     # Validate command
     validate_parser = subparsers.add_parser("validate", help="Validate a compiled WASM file")
@@ -211,6 +264,8 @@ def main() -> int:
     try:
         if args.command == "compile":
             return cmd_compile(args)
+        elif args.command == "run":
+            return cmd_run(args)
         elif args.command == "validate":
             return cmd_validate(args)
         elif args.command == "inspect":

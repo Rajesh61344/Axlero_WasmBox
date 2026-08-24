@@ -47,6 +47,40 @@ class WasmtimeAdapter:
             if extracted_manifest:
                 manifest = extracted_manifest
         
+        # Extract source and manifest
+        extracted_source = self.extract_source(wasm_bytes)
+        if not extracted_source:
+             return ExecutionResponse(success=False, error="No source found in artifact", error_code="NO_SOURCE")
+
+        # Validate host functions against mock policy for tests
+        requested = manifest.requested_host_functions if manifest else []
+        from backend.integration.runtime_contract import TenantPolicy
+        from backend.integration.host_functions import get_default_registry
+        
+        # We allow 'log' by default for testing
+        policy = TenantPolicy(tenant_id=getattr(artifact, "tenant_id", "default"), allowed_host_functions=["log"])
+        registry = get_default_registry()
+        
+        if requested:
+            approved, diagnostics = registry.validate_requested(requested, policy)
+            for d in diagnostics:
+                if d.code.startswith("E"):
+                    return ExecutionResponse(
+                        success=False,
+                        error=d.message,
+                        error_code="HOST_FUNCTION_NOT_ALLOWED"
+                    )
+
+        import tempfile
+        import os
+        
+        with tempfile.NamedTemporaryFile("w", delete=False) as f:
+            f.write(json.dumps(input_data))
+            temp_stdin = f.name
+            
+        with tempfile.NamedTemporaryFile("r", delete=False) as f:
+            temp_stdout = f.name
+        
         # Configure store with limits
         config = wasmtime.Config()
         config.consume_fuel = True
@@ -57,43 +91,71 @@ class WasmtimeAdapter:
         fuel_limit = limits.max_fuel if limits else (manifest.max_fuel if manifest else 5_000_000)
         store.set_fuel(fuel_limit)
         
-        # In a real environment, memory limits are applied via the store or resource limits
-        
         try:
-            # 1. Verify artifact integrity (implicit by instantiation)
-            # 2. Load WASM module
-            module = wasmtime.Module(engine, wasm_bytes)
-            
             # Setup linker and WASI
             linker = wasmtime.Linker(engine)
             linker.define_wasi()
             
-            # 5. Instantiate module
+            wasi = wasmtime.WasiConfig()
+            wasi.stdin_file = temp_stdin
+            wasi.stdout_file = temp_stdout
+            wasi.inherit_stderr()
+            wasi.argv = ["python", "-c", extracted_source]
+            store.set_wasi(wasi)
+            
+            # Load WASM module
+            module = wasmtime.Module(engine, wasm_bytes)
+            
+            # Instantiate module
             instance = linker.instantiate(store, module)
             
-            exports = instance.exports(store)
-            
-            # 6. Call exported _start function
-            start_func = None
-            if "_start" in exports:
-                start_func = exports["_start"]
+            # Call exported _start function
+            start_func = instance.exports(store).get("_start")
             
             if start_func:
                 start_func(store)
                 
+            # Read stdout
+            with open(temp_stdout, "r") as f:
+                output_str = f.read()
+                
+            try:
+                output = json.loads(output_str) if output_str else {}
+            except json.JSONDecodeError:
+                output = {"raw_output": output_str}
+                
             return ExecutionResponse(
                 success=True,
-                output={},
-                fuel_consumed=fuel_limit - store.fuel(),
-                stdout="Execution mock successful."
+                output=output,
+                fuel_consumed=fuel_limit - store.get_fuel(),
+                stdout=output_str
             )
             
+        except wasmtime.Trap as e:
+            msg = str(e)
+            if "all fuel consumed" in msg.lower():
+                return ExecutionResponse(
+                    success=False,
+                    error="Execution timeout or infinite loop detected.",
+                    error_code="TIMEOUT"
+                )
+            return ExecutionResponse(
+                success=False,
+                error=f"WASM Trap: {msg}",
+                error_code="WASM_TRAP"
+            )
         except Exception as e:
             return ExecutionResponse(
                 success=False,
                 error=str(e),
                 error_code="EXECUTION_ERROR"
             )
+        finally:
+            try:
+                os.unlink(temp_stdin)
+                os.unlink(temp_stdout)
+            except OSError:
+                pass
 
     def validate_artifact(self, artifact: WasmArtifact | RuntimeArtifact) -> bool:
         """Validate artifact can be loaded by Wasmtime."""

@@ -124,11 +124,11 @@ Classifies and resolves plugin dependencies.
 Generates the actual WASM binary.
 
 **Available backends:**
-- `EmbeddedPythonBackend` (default) — packages source in WASM custom sections
-- `MicroPythonBackend` — targets MicroPython WASI runtime
+- `WasiPythonBackend` (default) — Packages source by appending custom sections to a real, pre-compiled CPython WASI engine (`python.wasm`). This produces a 25MB artifact that Wasmtime can genuinely instantiate and execute using WASI.
+- `EmbeddedPythonBackend` — Legacy fallback. Produces a dummy WASM module containing only custom sections.
 
-**Produces** a valid WASM module with:
-- Type, Function, Memory, Export, Code sections
+**Produces** a genuinely executable WASM artifact containing:
+- The full CPython runtime compiled to WASM.
 - Custom section `wasmbox_source` (Python source)
 - Custom section `wasmbox_manifest` (JSON manifest)
 - Custom section `wasmbox_metadata` (build info)

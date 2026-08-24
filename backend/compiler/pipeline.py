@@ -50,6 +50,9 @@ class CompilerPipeline:
         """Select the appropriate WasmCompilerBackend based on config.backend."""
         if self.config.backend == WasmBackendType.EMBEDDED:
             return EmbeddedPythonBackend()
+        elif self.config.backend == WasmBackendType.WASI_PYTHON:
+            from .backends.wasi_python import WasiPythonBackend
+            return WasiPythonBackend()
         return EmbeddedPythonBackend()
 
     def compile(

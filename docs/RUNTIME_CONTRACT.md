@@ -131,12 +131,15 @@ manifest_json = WasmModuleBuilder.extract_custom_section(wasm_bytes, "wasmbox_ma
 6. Validate host function permissions against tenant policy
 7. Configure Wasmtime Store:
    a. Set fuel: store.set_fuel(manifest.max_fuel)
-   b. Set memory limit: store.set_limits(memory_size=manifest.memory_limit_bytes)
-8. Load MicroPython WASM runtime
-9. Extract wasmbox_source custom section
-10. Pass source to MicroPython for execution
-11. Capture output and return ExecutionResponse
-12. On timeout/fuel exhaustion: return error response
+   b. Set memory limit (or rely on default engine limits)
+8. Set up Wasmtime WASI:
+   a. Inject input payload to virtual stdin (`wasi.stdin_file`)
+   b. Capture virtual stdout (`wasi.stdout_file`)
+   c. Pass source code via CLI args: `wasi.argv = ["python", "-c", source]`
+9. Instantiate WASM module directly (`wasm_bytes` contains the CPython engine!)
+10. Call `_start()`
+11. Read and parse output JSON from stdout
+12. On timeout/fuel exhaustion: Wasmtime raises Trap, catch and return error
 ```
 
 ## Resource Limits
