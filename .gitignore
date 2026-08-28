@@ -1,0 +1,36 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Virtual environments
+venv/
+.venv/
+env/
+
+# Environment variables
+.env
+.env.*
+
+# IDEs
+.vscode/
+.idea/
+
+# OS files
+.DS_Store
+
+# WASM / model artifacts
+*.wasm
+*.engine
+*.onnx
+*.pt
+
+# Runtime/build/cache
+.wasmbox_cache/
+logs/
+outputs/
+
+# Test/cache
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
