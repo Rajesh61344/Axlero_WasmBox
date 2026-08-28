@@ -106,6 +106,27 @@ def main():
     assert "exceeds maximum allowed" in exc_info.value.message
 
 
+def test_parse_too_many_imports():
+    limits = CompilationLimits(max_imports=2)
+    parser = PluginParser(limits=limits)
+
+    source = """
+import json
+import math
+import re
+
+def main():
+    return True
+"""
+
+    with pytest.raises(ParseError) as exc_info:
+        parser.parse(source)
+
+    assert exc_info.value.code == "E008"
+    assert "Import count" in exc_info.value.message
+    assert "exceeds maximum allowed" in exc_info.value.message
+
+
 def test_parse_too_many_lines():
     limits = CompilationLimits(max_source_lines=5)
     parser = PluginParser(limits=limits)
