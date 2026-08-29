@@ -2,7 +2,7 @@ import ast
 import pytest
 
 from backend.compiler.analyzer import StaticAnalyzer
-from backend.compiler.config import CompileConfig
+from backend.compiler.config import CompileConfig, CompilationLimits
 from backend.compiler.models import DependencyCategory
 
 
@@ -208,3 +208,47 @@ def main():
     assert deps.get("os") == DependencyCategory.FORBIDDEN
     assert deps.get("json") == DependencyCategory.STDLIB
     assert deps.get("yaml") == DependencyCategory.UNSUPPORTED
+
+
+def test_analyze_function_and_class_limits(default_config):
+    config = CompileConfig()
+    config.compilation_limits = CompilationLimits(
+        max_functions=1,
+        max_classes=1,
+    )
+
+    source = """
+class First:
+    def method(self):
+        pass
+
+class Second:
+    def method(self):
+        pass
+
+def first():
+    pass
+
+def second():
+    pass
+"""
+
+    tree = get_ast(source)
+
+    analyzer = StaticAnalyzer()
+    result = analyzer.analyze(tree, source, config)
+
+    assert len(result.functions) == 2
+    assert len(result.classes) == 2
+
+    assert any(
+        "Function count exceeds compilation limit"
+        in message
+        for message in result.dangerous_operations
+    )
+
+    assert any(
+        "Class count exceeds compilation limit"
+        in message
+        for message in result.dangerous_operations
+    )
