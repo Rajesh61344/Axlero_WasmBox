@@ -12,7 +12,7 @@ from datetime import datetime, timezone
 from enum import Enum
 from typing import Any
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 
 class DependencyCategory(str, Enum):
@@ -160,10 +160,7 @@ class WasmArtifact(BaseModel):
     imports: list[str] = Field(default_factory=list)
     custom_sections: list[str] = Field(default_factory=list)
 
-    class Config:
-        """Pydantic config."""
-        # Allow bytes fields
-        arbitrary_types_allowed = True
+    model_config = ConfigDict(arbitrary_types_allowed=True)
 
 
 class CompilationMetrics(BaseModel):
@@ -204,9 +201,7 @@ class CompilationResult(BaseModel):
     errors: list[DiagnosticModel] = Field(default_factory=list)
     metrics: CompilationMetrics = Field(default_factory=CompilationMetrics)
 
-    class Config:
-        """Pydantic config."""
-        arbitrary_types_allowed = True
+    model_config = ConfigDict(arbitrary_types_allowed=True)
 
     @property
     def has_errors(self) -> bool:
