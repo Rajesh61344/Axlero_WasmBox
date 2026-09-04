@@ -252,3 +252,38 @@ def second():
         in message
         for message in result.dangerous_operations
     )
+
+def test_detects_recursive_function() -> None:
+    source = """
+def main(data):
+    if data:
+        return main(data - 1)
+    return 0
+"""
+
+    from backend.compiler import CompileConfig
+    from backend.compiler.analyzer import StaticAnalyzer
+    import ast
+
+    tree = ast.parse(source)
+    result = StaticAnalyzer().analyze(
+        tree,
+        source,
+        CompileConfig(enable_cache=False),
+    )
+
+    assert result.has_recursion is True
+
+def test_detects_recursive_function(default_config):
+    source = """
+def main(data):
+    if data:
+        return main(data - 1)
+    return 0
+"""
+
+    tree = get_ast(source)
+    analyzer = StaticAnalyzer()
+    result = analyzer.analyze(tree, source, default_config)
+
+    assert result.has_recursion is True
