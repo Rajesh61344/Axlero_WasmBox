@@ -9,6 +9,7 @@ from __future__ import annotations
 import json
 import os
 import tempfile
+from collections.abc import Callable
 from typing import Any
 
 from backend.compiler.config import ExecutionLimits
@@ -29,9 +30,43 @@ except ImportError:
 class WasmtimeAdapter:
     """Adapter for executing WASM artifacts using Wasmtime."""
 
-    def __init__(self, host_registry: Any = None) -> None:
+    def __init__(
+        self,
+        host_registry: Any = None,
+        policy_provider: Callable[[str], TenantPolicy] | None = None,
+    ) -> None:
         self.host_registry = host_registry
+        self.policy_provider = policy_provider
         self._wasmtime_available = wasmtime is not None
+
+    def resolve_tenant_policy(self, tenant_id: str) -> TenantPolicy:
+        """Resolve the security policy for a tenant.
+
+        A custom policy provider may supply tenant-specific permissions.
+
+        When no provider is configured, the runtime uses a restrictive
+        default policy that only permits the safe ``log`` host function.
+        """
+
+        if self.policy_provider is not None:
+            policy = self.policy_provider(tenant_id)
+
+            if not isinstance(policy, TenantPolicy):
+                raise TypeError(
+                    "policy_provider must return a TenantPolicy instance."
+                )
+
+            if policy.tenant_id != tenant_id:
+                raise ValueError(
+                    "policy_provider returned a policy for a different tenant."
+                )
+
+            return policy
+
+        return TenantPolicy(
+            tenant_id=tenant_id,
+            allowed_host_functions={"log"},
+        )
 
     def execute(
         self,
@@ -112,17 +147,14 @@ class WasmtimeAdapter:
             or "default"
         )
 
-        # IMPORTANT:
+        # Resolve the tenant-specific security policy.
         #
         # requested_host_functions only describes what the plugin
         # wants to use. It does NOT grant permission.
         #
-        # Until an external tenant-policy provider is connected,
-        # the runtime uses the restricted default policy.
-        policy = TenantPolicy(
-            tenant_id=tenant_id,
-            allowed_host_functions={"log"},
-        )
+        # If no external policy provider is configured, the runtime
+        # falls back to a restrictive default policy.
+        policy = self.resolve_tenant_policy(tenant_id)
 
         if requested:
             approved, diagnostics = registry.validate_requested(
